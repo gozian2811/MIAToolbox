@@ -207,40 +207,38 @@ def get_dicom_spacing(case_path, mode='imageposition'):
 	else:
 		return None
 
-def read_dicom_scan(case_path):
+def read_dicom_scan(case_path, order_mode='instnum'):
+	#order_mode in ('instnum', 'zpos')
 	slices = os.listdir(case_path)
 	zpositions = []
+	instnumbers = []
 	infos = []
 	for slice in slices:
 		if slice[-3:]!='xml':
 			info = pdc.read_file(case_path+'/'+slice)
 			zpositions.append(float(info.ImagePositionPatient[2]))
+			instnumbers.append(int(info.InstanceNumber))
 			infos.append(info)
 	if len(infos)==0:
 		return None, None
 
-	zparray = np.float_(zpositions)
-	indices = zparray.argsort()
-	volinfo = {'pixel_array':[]}
-	for i in range(len(indices)):
-		info = infos[indices[i]]
-		for ikey in info.dir():
-			if ikey not in volinfo.keys():
-				volinfo[ikey] = [info[ikey].value]
-			else:
-				volinfo[ikey].append(info[ikey].value)
-		volinfo['pixel_array'].append(info.pixel_array)
-	volinfo['pixel_array'] = np.int_(np.array(volinfo['pixel_array']) * float(info.RescaleSlope) + int(info.RescaleIntercept))
-	'''
-	volume = np.zeros((len(infos), infos[0].Rows, infos[0].Columns), dtype=int)
-	zparray = np.float_(zpositions)
-	indices = zparray.argsort()
+	volume = np.zeros((len(infos), infos[0].pixel_array.shape[0], infos[0].pixel_array.shape[1]), dtype=int)
+	if order_mode == 'zpos':
+		odarray = np.float_(zpositions)
+	else:
+		odarray = np.int_(instnumbers)
+	indices = odarray.argsort()
 
 	volinfo = {}
-	volinfo['uid'] = infos[0].SeriesInstanceUID
+	volinfo['uid'] = infos[0].StudyInstanceUID
 	oriposition = infos[indices[0]].ImagePositionPatient
 	origin = [float(oriposition[2]), float(oriposition[1]), float(oriposition[0])]
 	volinfo['origin'] = origin
+	#info = infos[0]
+	#pixelspacing = info.PixelSpacing
+	#slicethickness = zpositions[indices[1]] - zpositions[indices[0]]
+	#spacing = [slicethickness, float(pixelspacing[1]), float(pixelspacing[0])]
+	#volinfo['spacing'] = spacing
 
 	volinfo['zpositions'] = []
 	spacingstat = ([], [])
@@ -255,9 +253,8 @@ def read_dicom_scan(case_path):
 	slicethickness = ststat[stcounts.argmax()]
 	spacing = spstat[spcounts.argmax()].astype(float)
 	volinfo['spacing'] = (slicethickness, spacing[1], spacing[0])
-	'''
 
-	return volinfo['pixel_array'], volinfo
+	return volume, volinfo
 
 def sph_arrange(case_path, output_path='.'):
 	for s in os.listdir(case_path):
